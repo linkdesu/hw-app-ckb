@@ -27,7 +27,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@ledgerhq/hw-transport": "^5.9.0",
-    "bech32": "1.1.4",
+    "bech32": "2.0.0",
     "bip32-path": "0.4.2",
     "blake2b-wasm": "2.1.0"
   },
