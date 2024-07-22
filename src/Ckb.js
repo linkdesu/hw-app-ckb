@@ -73,7 +73,7 @@ export default class Ckb {
 
     const addr_contents: number[] = [
       // CKB 2021 address full format prefix
-      ...0x00,
+      0x00,
       // SECP256K1_BLAKE160 code hash
       ...[
         155, 215, 224, 111,  62, 207, 75,
