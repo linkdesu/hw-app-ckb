@@ -83,7 +83,7 @@ export default class Ckb {
         189, 163, 204, 232
       ],
       // SECP256K1_BLAKE160 hash type
-      0b0000000_1,
+      0b00000001,
       // lock args
       ...lockArg
     ];
