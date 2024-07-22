@@ -4,7 +4,7 @@ import type Transport from "@ledgerhq/hw-transport";
 import BIPPath from "bip32-path";
 import * as blockchain from "./annotated";
 import Blake2b from "blake2b-wasm";
-import * as bech32 from "bech32";
+import { bech32m } from "bech32";
 
 /**
  * Nervos API
@@ -71,12 +71,25 @@ export default class Ckb {
         .subarray(0, 20)
     );
 
-    const addr_contents = Buffer.alloc(22);
-    addr_contents.fill("0100", 0, 2, "hex");
-    addr_contents.fill(lockArg, 2, 22);
-    const addr = bech32.encode(
+    const addr_contents: number[] = [
+      // CKB 2021 address full format prefix
+      ...0x00,
+      // SECP256K1_BLAKE160 code hash
+      ...[
+        155, 215, 224, 111,  62, 207, 75,
+        224, 242, 252, 210,  24, 139, 35,
+        241, 185, 252, 200, 142,  93, 75,
+        101, 168,  99, 123,  23, 114, 59,
+        189, 163, 204, 232
+      ],
+      // SECP256K1_BLAKE160 hash type
+      0b0000000_1,
+      // lock args
+      ...lockArg
+    ];
+    const addr = bech32m.encode(
       testnet ? "ckt" : "ckb",
-      bech32.toWords(addr_contents)
+      bech32m.toWords(addr_contents)
     );
 
     return {
