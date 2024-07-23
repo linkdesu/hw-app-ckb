@@ -89,7 +89,8 @@ export default class Ckb {
     ];
     const addr = bech32m.encode(
       testnet ? "ckt" : "ckb",
-      bech32m.toWords(addr_contents)
+      bech32m.toWords(addr_contents),
+      1023
     );
 
     return {
