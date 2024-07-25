@@ -6,6 +6,10 @@ import * as blockchain from "./annotated";
 import Blake2b from "blake2b-wasm";
 import { bech32m } from "bech32";
 
+// CKB address is longer than the longest Bitcoin address
+// The bech32m encoding limit should be increased
+const BECH32_LIMIT = 1023;
+
 /**
  * Nervos API
  *
@@ -89,7 +93,8 @@ export default class Ckb {
     ];
     const addr = bech32m.encode(
       testnet ? "ckt" : "ckb",
-      bech32m.toWords(addr_contents)
+      bech32m.toWords(addr_contents),
+      BECH32_LIMIT
     );
 
     return {
