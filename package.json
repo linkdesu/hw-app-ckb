@@ -1,5 +1,5 @@
 {
-  "name": "hw-app-ckb",
+  "name": "@linkdesu/hw-app-ckb",
   "version": "0.2.0",
   "description": "Ledger Hardware Wallet Nervos CKB API",
   "keywords": [
@@ -18,8 +18,11 @@
     "url": "https://github.com/linkdesu/hw-app-ckb/issues"
   },
   "homepage": "https://github.com/LedgerHQ/ledgerjs",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "module": "dist/index.js",
+  "types": "dist/index.d.ts",
   "license": "Apache-2.0",
   "scripts": {
     "build": "rm -rf dist/ && tsc"
