@@ -1,14 +1,21 @@
-//@flow
-
-import type Transport from "@ledgerhq/hw-transport";
+import Transport from "@ledgerhq/hw-transport";
 import BIPPath from "bip32-path";
-import * as blockchain from "./annotated";
 import Blake2b from "blake2b-wasm";
 import { bech32m } from "bech32";
 
 // CKB address is longer than the longest Bitcoin address
 // The bech32m encoding limit should be increased
 const BECH32_LIMIT = 1023;
+
+function pathToBuffer(path: string) {
+  const bipPath = BIPPath.fromString(path).toPathArray();
+  const data = Buffer.alloc(1 + bipPath.length * 4);
+  data.writeUInt8(bipPath.length, 0);
+  bipPath.forEach((segment, index) => {
+    data.writeUInt32BE(segment, 1 + index * 4);
+  });
+  return data;
+}
 
 /**
  * Nervos API
@@ -18,9 +25,9 @@ const BECH32_LIMIT = 1023;
  * const ckb = new Ckb(transport);
  */
 export default class Ckb {
-  transport: Transport<*>;
+  transport: Transport;
 
-  constructor(transport: Transport<*>, scrambleKey: string = "CKB") {
+  constructor(transport: Transport, scrambleKey: string = "CKB") {
     this.transport = transport;
     transport.decorateAppAPIMethods(
       this,
@@ -45,21 +52,14 @@ export default class Ckb {
    * const lockArg = result.lockArg;
    * const address = result.address;
    */
-  async getWalletPublicKey(path: string, testnet: boolean): Promise<string> {
-    const bipPath = BIPPath.fromString(path).toPathArray();
-
+  async getWalletPublicKey(path: string, testnet: boolean) {
     const cla = 0x80;
     const ins = 0x02;
     const p1 = 0x00;
     const p2 = 0x00;
-    const data = Buffer.alloc(1 + bipPath.length * 4);
+    const pathBuf = pathToBuffer(path);
 
-    data.writeUInt8(bipPath.length, 0);
-    bipPath.forEach((segment, index) => {
-      data.writeUInt32BE(segment, 1 + index * 4);
-    });
-
-    const response = await this.transport.send(cla, ins, p1, p2, data);
+    const response = await this.transport.send(cla, ins, p1, p2, pathBuf);
 
     const publicKeyLength = response[0];
     const publicKey = response.slice(1, 1 + publicKeyLength);
@@ -89,7 +89,7 @@ export default class Ckb {
       // SECP256K1_BLAKE160 hash type
       0b00000001,
       // lock args
-      ...lockArg
+      ...Array.from(lockArg)
     ];
     const addr = bech32m.encode(
       testnet ? "ckt" : "ckb",
@@ -113,7 +113,7 @@ export default class Ckb {
    * const result = await ckb.getWalletPublicKey("44'/144'/0'/0/0");
    * const publicKey = result;
    */
-  async getWalletExtendedPublicKey(path: string): Promise<string> {
+  async getWalletExtendedPublicKey(path: string) {
     const bipPath = BIPPath.fromString(path).toPathArray();
 
     const cla = 0x80;
@@ -138,144 +138,6 @@ export default class Ckb {
         .toString("hex"),
     };
   }
-
-  /**
-   * Sign a Nervos transaction with a given BIP 32 path
-   *
-   * @param signPath the path to sign with, in BIP 32 format
-   * @param rawTxHex transaction to sign
-   * @param groupWitnessesHex hex of in-group and extra witnesses to include in signature
-   * @param contextTransaction list of transaction contexts for parsing
-   * @param changePath the path the transaction sends change to, in BIP 32 format (optional, defaults to signPath)
-   * @return a signature as hex string
-   * @example
-   * TODO
-   */
-
-  async signTransaction(
-    signPath: string | BIPPath | [number],
-    rawTx: string | blockchain.RawTransactionJSON,
-    groupWitnessesHex?: [string],
-    rawContextsTx: [string | blockchain.RawTransactionJSON],
-    changePath: string | BIPPath | [number]
-  ): Promise<string> {
-    return await this.signAnnotatedTransaction(
-      this.buildAnnotatedTransaction(
-        signPath,
-        rawTx,
-        groupWitnessesHex,
-        rawContextsTx,
-        changePath
-      )
-    );
-  }
-
-  /**
-   * Construct an AnnotatedTransaction for a given collection of signing data
-   *
-   * Parameters are the same as for signTransaction, but no ledger interaction is attempted.
-   *
-   * AnnotatedTransaction is a type defined for the ledger app that collects
-   * all of the information needed to securely confirm a transaction on-screen
-   * and a few bits of duplicative information to allow it to be processed as a
-   * stream.
-   */
-
-  buildAnnotatedTransaction(
-    signPath: string | BIPPath | [number],
-    rawTx: string | RawTransactionJSON,
-    groupWitnesses?: [string],
-    rawContextsTx: [string | RawTransactionJSON],
-    changePath: string | BIPPath | [number]
-  ): AnnotatedTransactionJSON {
-    const prepBipPath = (pathSrc) => {
-      if (Array.isArray(pathSrc)) {
-        return pathSrc;
-      }
-      if (typeof pathSrc === "object") {
-        return pathSrc.toPathArray();
-      }
-      if (typeof pathSrc === "string") {
-        return BIPPath.fromString(pathSrc).toPathArray();
-      }
-    };
-
-    const signBipPath = prepBipPath(signPath);
-    const changeBipPath = prepBipPath(changePath);
-
-    const getRawTransactionJSON = (rawTrans) => {
-      if (typeof rawTrans === "string") {
-        const rawTxBuffer = Buffer.from(rawTrans, "hex");
-        return new blockchain.RawTransaction(rawTxBuffer.buffer).toObject();
-      }
-      return rawTrans;
-    };
-
-    const contextTransactions = rawContextsTx.map(getRawTransactionJSON);
-
-    const rawTxUnpacked = getRawTransactionJSON(rawTx);
-
-    const annotatedCellInputVec = rawTxUnpacked.inputs.map((inpt, idx) => ({
-      input: inpt,
-      source: contextTransactions[idx],
-    }));
-
-    const annotatedRawTransaction = {
-      version: rawTxUnpacked.version,
-      cell_deps: rawTxUnpacked.cell_deps,
-      header_deps: rawTxUnpacked.header_deps,
-      inputs: annotatedCellInputVec,
-      outputs: rawTxUnpacked.outputs,
-      outputs_data: rawTxUnpacked.outputs_data,
-    };
-
-    return {
-      signPath: signBipPath,
-      changePath: changeBipPath,
-      inputCount: rawTxUnpacked.inputs.length,
-      raw: annotatedRawTransaction,
-      witnesses:
-        Array.isArray(groupWitnesses) && groupWitnesses.length > 0
-          ? groupWitnesses
-          : [this.defaultSighashWitness],
-    };
-  }
-
-  /**
-   * Sign an already constructed AnnotatedTransaction.
-   */
-  async signAnnotatedTransaction(
-    tx: AnnotatedTransaction | AnnotatedTransactionJSON
-  ): Promise<string> {
-    const rawAnTx = Buffer.from(blockchain.SerializeAnnotatedTransaction(tx));
-
-    const maxApduSize = 230;
-
-    let txFullChunks = Math.floor(rawAnTx.byteLength / maxApduSize);
-    let isContinuation = 0x00;
-    for (let i = 0; i < txFullChunks; i++) {
-      let data = rawAnTx.slice(i * maxApduSize, (i + 1) * maxApduSize);
-      await this.transport.send(0x80, 0x03, isContinuation, 0x00, data);
-      isContinuation = 0x01;
-    }
-
-    let lastOffset = txFullChunks * maxApduSize;
-    let lastData = rawAnTx.slice(lastOffset, lastOffset + maxApduSize);
-    let response = await this.transport.send(
-      0x80,
-      0x03,
-      isContinuation | 0x80,
-      0x00,
-      lastData
-    );
-    return response.slice(0,65).toString("hex");
-  }
-
-  /**
-   * An empty WitnessArgs with enough space to fit a sighash signature into.
-   */
-  defaultSighashWitness =
-    "55000000100000005500000055000000410000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
 
   /**
    * Get the version of the Nervos app installed on the hardware device
@@ -321,7 +183,7 @@ export default class Ckb {
   async signMessage(
     path: string,
     rawMsgHex: string,
-    displayHex: bool
+    displayHex: boolean
   ): Promise<string> {
     const bipPath = BIPPath.fromString(path).toPathArray();
     const magicBytes = Buffer.from("Nervos Message:");
@@ -329,7 +191,7 @@ export default class Ckb {
 
     //Init apdu
     let rawPath = Buffer.alloc(1 + 1 + bipPath.length * 4);
-    rawPath.writeInt8(displayHex, 0);
+    rawPath.writeInt8(displayHex ? 1 : 0, 0);
     rawPath.writeInt8(bipPath.length, 1);
     bipPath.forEach((segment, index) => {
       rawPath.writeUInt32BE(segment, 2 + index * 4);
@@ -350,5 +212,16 @@ export default class Ckb {
     return response.slice(0,65).toString("hex");
   }
 
+  async signMessageHash(
+    path: string,
+    rawMsgHex: string,
+  ): Promise<string> {
+    const rawMsg = Buffer.from(rawMsgHex, "hex");
+    let pathBuf = pathToBuffer(path);
+    await this.transport.send(0x80, 0x07, 0x00, 0x00, pathBuf);
+    let response = await this.transport.send(0x80, 0x07, 0x80, 0x00, rawMsg);
+
+    return response.slice(0,65).toString("hex");
+  }
 }
 

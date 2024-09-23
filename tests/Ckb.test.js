@@ -7,7 +7,7 @@ import {
   createTransportReplayer,
   RecordStore
 } from "@ledgerhq/hw-transport-mocker";
-import Ckb from "../src/Ckb";
+import Ckb from "../src";
 
 test("ckb.getPublicKey", async () => {
   const Transport = createTransportReplayer(
@@ -214,14 +214,14 @@ test("ckb.signTransaction", async () => {
             "tx_hash": "a563884b3686078ec7e7677a5f86449b15cf2693f3c1241766c6996f206cc541",
             "index": "0x2"
           },
-          "dep_type": "code" 
+          "dep_type": "code"
         },
         {
           "out_point": {
             "tx_hash": "ace5ea83c478bb866edf122ff862085789158f5cbff155b7bb5f13058555b708",
             "index": "0x0"
           },
-          "dep_type": "dep_group" 
+          "dep_type": "dep_group"
         }
       ],
       "header_deps": [
